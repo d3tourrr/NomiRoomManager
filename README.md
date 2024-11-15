@@ -16,3 +16,24 @@ This small commandline application offers a way for Nomi users to manage their N
 
 The Nomi Room Manager is not intended as a way for you to interact with your Nomi. It is provided to streamline the process of managing your Rooms.
 
+# Using Nomi Room Manager
+
+Go to the [Releases](https://github.com/d3tourrr/NomiRoomManager/releases/latest) and download the correct app for your system. Nomi Room Manager runs on Windows, macOS and Linux. After downloading the app, run it like you would run any other.
+
+## Windows
+
+1. Open a Command Prompt or PowerShell terminal
+1. Navigate to the location the app was downloaded
+1. Type `.\NomiRoomManager-Windows.exe`
+
+## macOS
+
+1. Open a Terminal
+1. Navigate to the location where the app was downloaded
+1. Type `./NomiRoomManager-macOS`
+
+## Linux
+
+1. Open a Terminal
+1. Navigate to the location where the app was downloaded
+1. Type `./NomiRoomManager-Linux`
