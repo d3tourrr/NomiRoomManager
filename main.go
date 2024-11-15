@@ -524,7 +524,88 @@ func removeFromSlice(original []string, toRemove []string) []string {
 }
 
 func updateRoom(property string) {
-    fmt.Printf("Updating room: %v\n", property)
+    listRooms(false)
+
+    roomUpdatePrompt := promptui.Select{
+        Label: "Choose a room to update",
+        Items: UserRooms,
+        Templates: promptTemplateWithProps,
+        Size: len(UserRooms),
+    }
+
+    _, roomToUpdateString, err := roomUpdatePrompt.Run()
+    if err != nil {
+        fmt.Printf("Error choosing room to add Nomi to: %v\n", err)
+    }
+
+
+    roomUuid := strings.TrimPrefix(strings.Split(roomToUpdateString, " ")[0], "{") 
+    roomToUpdate := GetRoomById(UserRooms, roomUuid)
+    
+    labelText := ""
+    currentValue := ""
+    jsonBodyProperty := ""
+    var updateValue interface{}
+
+    switch strings.ToUpper(property) {
+        case "NAME":
+        labelText = "Name"
+        currentValue = roomToUpdate.Name
+        jsonBodyProperty = "name"
+        case "NOTE":
+        labelText = "Note"
+        currentValue = roomToUpdate.Note
+        jsonBodyProperty = "note"
+        case "BACKCHANNELING":
+        labelText = "Backchanneling Setting"
+        currentValue = strconv.FormatBool(roomToUpdate.BackchannelingEnabled)
+        jsonBodyProperty = "backchannelingEnabled"
+    }
+
+    promptLabel := "Update " + labelText + " (Current Value: " + currentValue + ")"
+
+    if jsonBodyProperty == "name" || jsonBodyProperty == "note" {
+        roomPrompt := promptui.Prompt {
+            Label: promptLabel,
+        }
+
+        updateValue, err = roomPrompt.Run()
+        if err != nil {
+            fmt.Printf("Error getting new room value: %v\n", err)
+        }
+    } else {
+        backchannelPrompt := promptui.Select{
+            Label: promptLabel,
+            Items: []bool{true, false},
+            Templates: promptTemplateNoProps,
+        }
+
+        _, bcValue, err := backchannelPrompt.Run()
+        if err != nil {
+            fmt.Printf("Error choosing backchanneling option: %v\n", err)
+        }
+
+        updateValue, err = strconv.ParseBool(bcValue)
+        if err != nil {
+            fmt.Printf("Error converting selection %v to bool: %v", bcValue, err)
+        }
+    }
+
+    callBody := map[string]interface{}{
+        jsonBodyProperty: updateValue,
+    }
+    callUrl := strings.Join([]string{ApiRoot, "rooms/", roomUuid}, "")
+
+    _, err = ApiCall(callUrl, "PUT", callBody)
+    if err != nil {
+        fmt.Printf("Error in add Nomi to room API call: %v\n", err)
+    }
+
+    listRooms(false)
+    fmt.Println("Updated room:")
+    roomUpdated := GetRoomById(UserRooms, roomUuid)
+    fmt.Println(roomUpdated.DisplayRoom("verbose"))
+
     return
 }
 
