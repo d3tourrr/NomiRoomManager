@@ -14,6 +14,8 @@ import (
     "github.com/manifoldco/promptui"
 )
 
+var version = "v0.1.0"
+
 type Nomi struct {
     Uuid string
     Gender string
@@ -117,7 +119,7 @@ var promptTemplateWithProps *promptui.SelectTemplates
 
 func main() {
     fmt.Println("Welcome to d3tour's Nomi Room Manager")
-    fmt.Println("Use the arrow keys to navigate selection menus")
+    fmt.Println("Version: " + version + ". Check for new versions: https://github.com/d3tourrr/NomiRoomManager/Releases .")
 
     ApiRoot = "https://api.nomi.ai/v1/"
     ApiKey = os.Getenv("NOMI_API_KEY")
