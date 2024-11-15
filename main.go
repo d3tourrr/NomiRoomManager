@@ -58,6 +58,16 @@ func GetNomiById(nomiCollection []Nomi, uuid string) *Nomi {
     return nil
 }
 
+func GetRoomById(roomCollection []RoomReceive, uuid string) *RoomReceive {
+    for _, r := range roomCollection {
+        if r.Uuid == uuid {
+            return &r
+        }
+    }
+
+    return nil
+}
+
 func (nomi *Nomi) DisplayNomi(mode string) string {
     if mode == "" {
         return fmt.Sprintf(red + "%-20s" + cyan + "%10s\n" + reset, nomi.Name, nomi.Uuid)
@@ -102,6 +112,8 @@ var ApiRoot string
 var ApiKey string
 var UserNomis []Nomi
 var UserRooms []RoomReceive
+var promptTemplateNoProps *promptui.SelectTemplates
+var promptTemplateWithProps *promptui.SelectTemplates
 
 func main() {
     fmt.Println("Welcome to d3tour's Nomi Room Manager")
@@ -112,7 +124,7 @@ func main() {
     var err error
     if ApiKey == "" {
         keyPrompt := promptui.Prompt {
-            Label: "Enter your Nomi.ai API key",
+            Label: "Enter your Nomi.ai API key (skip this step in the future by setting your NOMI_API_KEY environment variable)",
         }
         ApiKey, err = keyPrompt.Run()
         if err != nil {
@@ -125,6 +137,19 @@ func main() {
         return
     }
 
+    promptTemplateNoProps = &promptui.SelectTemplates{
+        Active: `▶ {{ . | cyan | bold }}`,
+        Inactive: `  {{ . | yellow }}`,
+        Selected: `✔ {{ . | green | bold }}`,
+        Details: `{{ "Selected:" | faint }} {{ . }} `,
+    }
+
+    promptTemplateWithProps = &promptui.SelectTemplates{
+        Label:    "{{ . }}",
+        Active:   "▶ {{ .Name | red }} ({{ .Uuid | cyan }})",
+        Inactive: "  {{ .Name | red }} ({{ .Uuid | yellow }})",
+        Selected: "✔ {{ .Name | green}} ({{.Uuid | cyan }} selected)",
+    }
     stop := false
     for {
         stop = mainMenu()
@@ -151,12 +176,7 @@ func mainMenu() bool {
     prompt := promptui.Select{
         Label: "What would you like to do?",
         Items: menuItems,
-        Templates: &promptui.SelectTemplates{
-            Active: `▶ {{ . | cyan | bold }}`,
-            Inactive: `  {{ . | yellow }}`,
-            Selected: `✔ {{ . | green | bold }}`,
-            Details: `{{ "Selected:" | faint }} {{ . }} `,
-        },
+        Templates: promptTemplateNoProps,
         Size: len(menuItems),
     }
 
@@ -265,12 +285,7 @@ func createRoom() {
     backchannelPrompt := promptui.Select{
         Label: "Room Backchanneling",
         Items: []bool{true, false},
-        Templates: &promptui.SelectTemplates{
-            Active: `▶ {{ . | cyan | bold }}`,
-            Inactive: `  {{ . | yellow }}`,
-            Selected: `✔ {{ . | green | bold }}`,
-            Details: `{{ "Selected:" | faint }} {{ . }} `,
-        },
+        Templates: promptTemplateNoProps,
     }
 
     _, backchanneling, err := backchannelPrompt.Run()
@@ -282,7 +297,7 @@ func createRoom() {
         fmt.Printf("Error parsing backchanneling option as bool: %v", err)
     }
 
-    nomisToAdd := nomiMultiSelect()
+    nomisToAdd := nomiMultiSelect(UserNomis)
     var nomiUuids []string
     for _, n := range nomisToAdd {
         nomiUuids = append(nomiUuids, n.Uuid)
@@ -311,7 +326,7 @@ func createRoom() {
     fmt.Println(room.DisplayRoom("verbose"))
 }
 
-func nomiMultiSelect() []Nomi {
+func nomiMultiSelect(nomis []Nomi) []Nomi {
     var retItems []Nomi
     var choices []interface{}
     choices = append(choices, Nomi{
@@ -321,25 +336,18 @@ func nomiMultiSelect() []Nomi {
         Created: " ",
         RelationshipType: " ",
     })
-    for _, n := range UserNomis {
+    for _, n := range nomis {
         choices = append(choices, n)
     }
 
     selectedItems := make(map[string]Nomi)
 
-    templates := &promptui.SelectTemplates{
-        Label:    "{{ . }}",
-        Active:   "\U0001F449 {{ .Name | red }} ({{ .Uuid | cyan }})",
-        Inactive: "    {{ .Name | red }} ({{ .Uuid | yellow }})",
-        Selected: "\U0001F58C  {{ .Name | green}} ({{.Uuid | cyan }} selected)",
-    }
-
     for {
         prompt := promptui.Select{
-            Templates: templates,
+            Templates: promptTemplateWithProps,
             Label: "Select Nomis (Press enter to toggle selection. Select 'Finish Selection' to end.)",
             Items: choices,
-            Size: len(UserNomis),
+            Size: len(nomis) + 1,
         }
 
         _, choice, err := prompt.Run()
@@ -370,17 +378,10 @@ func nomiMultiSelect() []Nomi {
 func deleteRoom() {
     listRooms(false)
 
-    templates := &promptui.SelectTemplates{
-        Label:    "{{ . }}",
-        Active:   "\U0001F449 {{ .Name | red }} ({{ .Uuid | cyan }})",
-        Inactive: "    {{ .Name | red }} ({{ .Uuid | yellow }})",
-        Selected: "\U0001F58C  {{ .Name | green}} ({{.Uuid | cyan }} selected)",
-    }
-
     deleteRoomPrompt := promptui.Select{
         Label: "Choose a room to delete",
         Items: UserRooms,
-        Templates: templates,
+        Templates: promptTemplateWithProps,
         Size: len(UserRooms),
     }
 
@@ -414,13 +415,112 @@ func deleteRoom() {
 }
 
 func addNomiRoom() {
-    fmt.Println("Adding Nomi to Room...")
+    listRooms(false)
+
+    addNomiRoomPrompt := promptui.Select{
+        Label: "Choose a room to add a Nomi to",
+        Items: UserRooms,
+        Templates: promptTemplateWithProps,
+        Size: len(UserRooms),
+    }
+
+    _, roomToAddTo, err := addNomiRoomPrompt.Run()
+    if err != nil {
+        fmt.Printf("Error choosing room to add Nomi to: %v\n", err)
+    }
+
+    roomUuid := strings.TrimPrefix(strings.Split(roomToAddTo, " ")[0], "{") 
+    callUrl := strings.Join([]string{ApiRoot, "rooms/", roomUuid}, "")
+    nomisToAdd := nomiMultiSelect(UserNomis)
+    var nomisToAddUuids []string
+    for _, n := range nomisToAdd {
+        nomisToAddUuids = append(nomisToAddUuids, n.Uuid)
+    }
+    for _, n := range GetRoomById(UserRooms, roomUuid).Nomis {
+        nomisToAddUuids = append(nomisToAddUuids, n.Uuid)
+    }
+
+    callBody := map[string]interface{}{
+        "nomiUuids": nomisToAddUuids,
+    }
+
+    _, err = ApiCall(callUrl, "PUT", callBody)
+    if err != nil {
+        fmt.Printf("Error in add Nomi to room API call: %v\n", err)
+    }
+
+    listRooms(false)
+    fmt.Println("Updated room:")
+    roomUpdated := GetRoomById(UserRooms, roomUuid)
+    fmt.Println(roomUpdated.DisplayRoom("verbose"))
+
     return
 }
 
 func removeNomiRoom() {
-    fmt.Println("Removing Nomi from Room...")
+    listRooms(false)
+
+    removeNomiRoomPrompt := promptui.Select{
+        Label: "Choose a room to remove a Nomi from",
+        Items: UserRooms,
+        Templates: promptTemplateWithProps,
+        Size: len(UserRooms),
+    }
+
+    _, roomToRemoveFrom, err := removeNomiRoomPrompt.Run()
+    if err != nil {
+        fmt.Printf("Error choosing room to add Nomi to: %v\n", err)
+    }
+
+    roomUuid := strings.TrimPrefix(strings.Split(roomToRemoveFrom, " ")[0], "{") 
+    callUrl := strings.Join([]string{ApiRoot, "rooms/", roomUuid}, "")
+    roomNomis := GetRoomById(UserRooms, roomUuid).Nomis
+    nomisToRemove := nomiMultiSelect(roomNomis)
+
+    var nomisToRemoveUuids []string
+    for _, n := range nomisToRemove {
+        nomisToRemoveUuids = append(nomisToRemoveUuids, n.Uuid)
+    }
+
+    var currentRoomNomiUuids []string
+    for _, n := range GetRoomById(UserRooms, roomUuid).Nomis {
+        currentRoomNomiUuids = append(currentRoomNomiUuids, n.Uuid)
+    }
+
+    resultantNomiUuids := removeFromSlice(currentRoomNomiUuids, nomisToRemoveUuids)
+    fmt.Printf("Resultant IDs: %v\n", strings.Join(resultantNomiUuids, ", "))
+
+    callBody := map[string]interface{}{
+        "nomiUuids": resultantNomiUuids,
+    }
+
+    _, err = ApiCall(callUrl, "PUT", callBody)
+    if err != nil {
+        fmt.Printf("Error in add Nomi to room API call: %v\n", err)
+    }
+
+    listRooms(false)
+    fmt.Println("Updated room:")
+    roomUpdated := GetRoomById(UserRooms, roomUuid)
+    fmt.Println(roomUpdated.DisplayRoom("verbose"))
+
     return
+}
+
+func removeFromSlice(original []string, toRemove []string) []string {
+    removeSet := make(map[string]bool)
+    for _, i := range toRemove {
+        removeSet[i] = true
+    }
+
+    retSlice := []string{}
+    for _, j := range original {
+        if !removeSet[j] {
+            retSlice = append(retSlice, j)
+        }
+    }
+
+    return retSlice
 }
 
 func updateRoom(property string) {
